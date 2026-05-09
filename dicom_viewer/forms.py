@@ -13,8 +13,7 @@ class registration_form(FlaskForm):
                       validators=[DataRequired()])
     age = IntegerField('Age', 
                        validators=[DataRequired(), NumberRange(min=1, max=120)])
-    user_type = SelectField('User Type', choices=[('Patient', 'Patient'), 
-                                                  ('Hospital', 'Hospital'),
+    user_type = SelectField('User Type', choices=[('Patient', 'Patient'),
                                                   ('Medic', 'Medic')], 
                       validators=[DataRequired()])
     password = PasswordField('Password', validators=[DataRequired()])

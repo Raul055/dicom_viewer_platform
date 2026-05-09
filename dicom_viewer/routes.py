@@ -1,7 +1,6 @@
 from flask import Flask, render_template, flash, redirect, url_for
 from dicom_viewer import app
 from dicom_viewer.forms import login_form, registration_form
-from dicom_viewer.models import User
 
 
 @app.route("/")
