@@ -24,21 +24,22 @@
           <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarToggle" aria-controls="navbarToggle" aria-expanded="false" aria-label="Toggle navigation">
             <span class="navbar-toggler-icon"></span>
           </button>
+          <!-- Navbar left side -->
           <div class="collapse navbar-collapse" id="navbarToggle">
             <div class="navbar-nav mr-auto">
               <a class="nav-item nav-link" href="{{ url_for('home') }}">Home</a>
               {% if current_user.is_authenticated %}
-              <!-- Medic Only Button -->
+              <!-- Medic button -->
               {% if current_user.user_type == 'Medic' %}
                 <a class="nav-item nav-link" href="#">Patient List</a>
               {% endif %}
-              <!-- Patient Only Button -->
+              <!-- Patient button -->
               {% if current_user.user_type == 'Patient' %}
                 <a class="nav-item nav-link" href="#">My DICOM Scans</a>
               {% endif %}
               {% endif %}
             </div>
-            <!-- Navbar Right Side -->
+            <!-- Navbar right side -->
             <div class="navbar-nav">
               {% if current_user.is_authenticated %}
                 <a class="nav-item nav-link" href="{{ url_for('account') }}">Account</a>
