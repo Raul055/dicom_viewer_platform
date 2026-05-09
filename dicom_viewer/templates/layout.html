@@ -27,6 +27,16 @@
           <div class="collapse navbar-collapse" id="navbarToggle">
             <div class="navbar-nav mr-auto">
               <a class="nav-item nav-link" href="{{ url_for('home') }}">Home</a>
+              {% if current_user.is_authenticated %}
+              <!-- Medic Only Button -->
+              {% if current_user.user_type == 'Medic' %}
+                <a class="nav-item nav-link" href="#">Patient List</a>
+              {% endif %}
+              <!-- Patient Only Button -->
+              {% if current_user.user_type == 'Patient' %}
+                <a class="nav-item nav-link" href="#">My DICOM Scans</a>
+              {% endif %}
+              {% endif %}
             </div>
             <!-- Navbar Right Side -->
             <div class="navbar-nav">

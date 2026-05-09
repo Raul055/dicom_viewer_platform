@@ -5,6 +5,7 @@
             {{ form.hidden_tag() }}
             <fieldset class="form-group">
                 <legend class="border-bottom mb-4">Join Today</legend>
+                <!-- Username register -->
                 <div class="form-group">
                     {{ form.username.label(class="form-control-label") }}
                     {% if form.username.errors %}
@@ -18,6 +19,7 @@
                         {{ form.username(class="form-control form-control-lg") }}
                     {% endif %}
                 </div>
+                <!-- Email register -->
                 <div class="form-group">
                     {{ form.email.label(class="form-control-label") }}
                     {% if form.email.errors %}
@@ -31,6 +33,7 @@
                         {{ form.email(class="form-control form-control-lg") }}
                     {% endif %}
                 </div>
+                <!-- Gender register -->
                 <div class="form-group">
                     {{ form.gender.label(class="form-control-label") }}
                     {% if form.gender.errors %}
@@ -44,6 +47,7 @@
                         {{ form.gender(class="form-control form-control-lg") }}
                     {% endif %}
                 </div>
+                <!-- Age register -->
                 <div class="form-group">
                     {{ form.age.label(class="form-control-label") }}
                     {% if form.age.errors %}
@@ -57,6 +61,7 @@
                         {{ form.age(class="form-control form-control-lg", type="number") }}
                     {% endif %}
                 </div>
+                <!-- User type register -->
                 <div class="form-group">
                     {{ form.user_type.label(class="form-control-label") }}
                     {% if form.user_type.errors %}
@@ -70,6 +75,7 @@
                         {{ form.user_type(class="form-control form-control-lg") }}
                     {% endif %}
                 </div>
+                <!-- Password register -->
                 <div class="form-group">
                     {{ form.password.label(class="form-control-label") }}
                     {% if form.password.errors %}
@@ -83,6 +89,7 @@
                         {{ form.password(class="form-control form-control-lg") }}
                     {% endif %}
                 </div>
+                <!-- Confirm password register -->
                 <div class="form-group">
                     {{ form.confirm_password.label(class="form-control-label") }}
                     {% if form.confirm_password.errors %}

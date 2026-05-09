@@ -6,6 +6,7 @@
         <div class="media-body">
           <h2 class="account-heading">{{ current_user.username }}</h2>
           <p class="text-secondary">{{ current_user.email }}</p>
+          <p class="text-secondary">{{ current_user.user_type }}</p>
         </div>
       </div>
         <form method="POST" action="" enctype="multipart/form-data">
@@ -14,7 +15,6 @@
                 <legend class="border-bottom mb-4">Account Info</legend>
                 <div class="form-group">
                     {{ form.username.label(class="form-control-label") }}
-
                     {% if form.username.errors %}
                         {{ form.username(class="form-control form-control-lg is-invalid") }}
                         <div class="invalid-feedback">

@@ -46,9 +46,6 @@ class login_form(FlaskForm):
     email = StringField('Email',
                         validators=[DataRequired(), Email()])
     password = PasswordField('Password', validators=[DataRequired()])
-    user_type = SelectField('User Type', choices=[('Patient', 'Patient'),
-                                                  ('Medic', 'Medic')], 
-                      validators=[DataRequired()])
     remember_me = BooleanField('Remember me')
     submit = SubmitField('Login')
 

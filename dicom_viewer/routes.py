@@ -28,23 +28,23 @@ def register():
         
         # Inside your register route logic
         if form.user_type.data == "Patient":
-            # This automatically creates a row in 'user' AND 'patient'
+            # Creates row in USER and PATIENT
             user = Patient(
                 username=form.username.data,
                 email=form.email.data,
                 gender=form.gender.data,
                 age=form.age.data,
-                user_type='Patient', # Sets polymorphic_identity
+                user_type='Patient', # User type
                 password=hashed_password
             )
         elif form.user_type.data == "Medic":
-            # This automatically creates a row in 'user' AND 'medic'
+            # Creates row in USER and MEDIC
             user = Medic(
                 username=form.username.data,
                 email=form.email.data,
                 gender=form.gender.data,
                 age=form.age.data,
-                user_type='Medic', # Sets polymorphic_identity
+                user_type='Medic', # User type
                 password=hashed_password
             )
         # Adds info to database

@@ -5,6 +5,7 @@
             {{ form.hidden_tag() }}
             <fieldset class="form-group">
                 <legend class="border-bottom mb-4">Login</legend>
+                <!-- Email login -->
                 <div class="form-group">
                     {{ form.email.label(class="form-control-label") }}
 
@@ -19,6 +20,7 @@
                         {{ form.email(class="form-control form-control-lg") }}
                     {% endif %}
                 </div>
+                <!-- Password login -->
                 <div class="form-group">
                     {{ form.password.label(class="form-control-label") }}
                     {% if form.password.errors %}
@@ -32,19 +34,7 @@
                         {{ form.password(class="form-control form-control-lg") }}
                     {% endif %}
                 </div>
-                <div class="form-group">
-                    {{ form.user_type.label(class="form-control-label") }}
-                    {% if form.user_type.errors %}
-                        {{ form.user_type(class="form-control form-control-lg is-invalid") }}
-                        <div class="invalid-feedback">
-                            {% for error in form.user_type.errors %}
-                                <span>{{ error }}</span>
-                            {% endfor %}
-                        </div>
-                    {% else %}
-                        {{ form.user_type(class="form-control form-control-lg") }}
-                    {% endif %}
-                </div>
+                <!-- Rememeber me button -->
                 <div class="form-check">
                     {{ form.remember_me(class="form-check-input") }}
                     {{ form.remember_me.label(class="form-check-label") }}

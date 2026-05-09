@@ -1,2 +1,3 @@
 __pycache__/
-test.py
+dicom_viewer/static/profile_pics/*
+!dicom_viewer/static/profile_pics/default.jpg
