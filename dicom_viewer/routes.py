@@ -7,7 +7,7 @@ from PIL import Image
 from flask import render_template, flash, redirect, url_for, request, jsonify, send_from_directory, abort
 from dicom_viewer import app, db, bcrypt
 from dicom_viewer.forms import login_form, registration_form, update_account_form, DicomUploadForm
-from dicom_viewer.models import User, Patient, Medic, Dicom_image
+from dicom_viewer.models import User, Patient, Medic, Dicom_image, AccessRequest
 from flask_login import login_user, current_user, logout_user, login_required
 import pydicom
 
@@ -183,7 +183,7 @@ def account():
     image_file = url_for('static', filename='profile_pics/' + current_user.image_file)
     return render_template('account.html', title='account', image_file=image_file, form=form)
 
-# ── Patient: upload & manage own scans ────────────────────────────────────────
+# ── Patient: scans ─────────────────────────────────────────────────────────────
 
 @app.route('/my-scans')
 @login_required
@@ -209,21 +209,14 @@ def upload_scan():
         filename = random_hex + (ext if ext else '.dcm')
         filepath = os.path.join(DICOM_UPLOAD_FOLDER, filename)
         f.save(filepath)
-
-        # Validate it's a real DICOM
         try:
             pydicom.dcmread(filepath)
         except Exception:
             os.remove(filepath)
             flash('Invalid DICOM file. Please upload a valid .dcm file.', 'danger')
             return redirect(url_for('upload_scan'))
-
-        scan = Dicom_image(
-            name=form.name.data,
-            description=form.description.data,
-            image_file=filename,
-            patient_id=current_user.id
-        )
+        scan = Dicom_image(name=form.name.data, description=form.description.data,
+                           image_file=filename, patient_id=current_user.id)
         db.session.add(scan)
         db.session.commit()
         flash('DICOM scan uploaded successfully!', 'success')
@@ -244,7 +237,69 @@ def delete_scan(scan_id):
     flash('Scan deleted.', 'success')
     return redirect(url_for('my_scans'))
 
-# ── Medic: view patient list & their scans ────────────────────────────────────
+# ── Patient: access requests inbox ────────────────────────────────────────────
+
+@app.route('/my-requests')
+@login_required
+def my_requests():
+    if current_user.user_type != 'Patient':
+        flash('Access restricted to patients.', 'warning')
+        return redirect(url_for('home'))
+    patient = Patient.query.get(current_user.id)
+    pending   = [r for r in patient.access_requests if r.status == 'pending']
+    responded = [r for r in patient.access_requests if r.status != 'pending']
+    return render_template('my_requests.html', title='Access Requests',
+                           pending=pending, responded=responded)
+
+@app.route('/respond-request/<int:request_id>/<action>', methods=['POST'])
+@login_required
+def respond_request(request_id, action):
+    if current_user.user_type != 'Patient':
+        abort(403)
+    req = AccessRequest.query.get_or_404(request_id)
+    if req.patient_id != current_user.id:
+        abort(403)
+    if req.status != 'pending':
+        flash('This request has already been responded to.', 'warning')
+        return redirect(url_for('my_requests'))
+
+    if action == 'approve':
+        req.status = 'approved'
+        # Link medic <-> patient in the access_table
+        medic   = Medic.query.get(req.medic_id)
+        patient = Patient.query.get(current_user.id)
+        if patient not in medic.patients:
+            medic.patients.append(patient)
+        db.session.commit()
+        flash(f'You have granted Dr. {req.medic.username} access to your scans.', 'success')
+    elif action == 'reject':
+        req.status = 'rejected'
+        db.session.commit()
+        flash(f'You have rejected the request from Dr. {req.medic.username}.', 'info')
+    else:
+        abort(400)
+
+    return redirect(url_for('my_requests'))
+
+@app.route('/revoke-access/<int:medic_id>', methods=['POST'])
+@login_required
+def revoke_access(medic_id):
+    if current_user.user_type != 'Patient':
+        abort(403)
+    medic   = Medic.query.get_or_404(medic_id)
+    patient = Patient.query.get(current_user.id)
+    if patient in medic.patients:
+        medic.patients.remove(patient)
+    # Also mark the related approved request as rejected
+    req = AccessRequest.query.filter_by(
+        medic_id=medic_id, patient_id=current_user.id, status='approved').first()
+    if req:
+        req.status = 'rejected'
+    db.session.commit()
+    flash(f'Access revoked for Dr. {medic.username}.', 'info')
+    return redirect(url_for('my_requests'))
+
+# ── Medic: patient list (approved only) & request flow ────────────────────────
 
 @app.route('/patients')
 @login_required
@@ -252,8 +307,64 @@ def patient_list():
     if current_user.user_type != 'Medic':
         flash('Access restricted to medics.', 'warning')
         return redirect(url_for('home'))
+    medic = Medic.query.get(current_user.id)
+
+    # All patients + annotate with request state for this medic
     all_patients = Patient.query.all()
-    return render_template('patient_list.html', title='Patient List', patients=all_patients)
+    approved_ids = {p.id for p in medic.patients}
+
+    sent_requests = {r.patient_id: r for r in medic.sent_requests}
+
+    patients_info = []
+    for p in all_patients:
+        if p.id in approved_ids:
+            state = 'approved'
+        elif p.id in sent_requests:
+            state = sent_requests[p.id].status   # 'pending' or 'rejected'
+        else:
+            state = 'none'
+        patients_info.append({'patient': p, 'state': state})
+
+    return render_template('patient_list.html', title='Patient List',
+                           patients_info=patients_info)
+
+@app.route('/request-access/<int:patient_id>', methods=['POST'])
+@login_required
+def request_access(patient_id):
+    if current_user.user_type != 'Medic':
+        abort(403)
+    patient = Patient.query.get_or_404(patient_id)
+    medic   = Medic.query.get(current_user.id)
+
+    # Don't duplicate pending requests
+    existing = AccessRequest.query.filter_by(
+        medic_id=current_user.id, patient_id=patient_id).first()
+    if existing:
+        if existing.status == 'pending':
+            flash('You already have a pending request for this patient.', 'warning')
+        elif existing.status == 'approved':
+            flash('You already have access to this patient.', 'info')
+        elif existing.status == 'rejected':
+            # Allow re-requesting after rejection
+            existing.status = 'pending'
+            db.session.commit()
+            flash(f'Access re-requested from {patient.username}.', 'success')
+        return redirect(url_for('patient_list'))
+
+    req = AccessRequest(medic_id=current_user.id, patient_id=patient_id)
+    db.session.add(req)
+    db.session.commit()
+    flash(f'Access requested from patient {patient.username}. Awaiting their approval.', 'success')
+    return redirect(url_for('patient_list'))
+
+@app.route('/my-access-requests')
+@login_required
+def my_sent_requests():
+    if current_user.user_type != 'Medic':
+        abort(403)
+    medic = Medic.query.get(current_user.id)
+    return render_template('sent_requests.html', title='My Access Requests',
+                           requests=medic.sent_requests)
 
 @app.route('/patient/<int:patient_id>/scans')
 @login_required
@@ -261,22 +372,32 @@ def patient_scans(patient_id):
     if current_user.user_type != 'Medic':
         flash('Access restricted to medics.', 'warning')
         return redirect(url_for('home'))
+    medic   = Medic.query.get(current_user.id)
     patient = Patient.query.get_or_404(patient_id)
+    # Enforce access control
+    if patient not in medic.patients:
+        flash('You do not have access to this patient\'s scans. Request access first.', 'danger')
+        return redirect(url_for('patient_list'))
     return render_template('patient_scans.html', title=f"{patient.username}'s Scans",
                            patient=patient, scans=patient.dicom_images)
 
-# ── Shared: DICOM viewer page ──────────────────────────────────────────────────
+# ── Shared: viewer ─────────────────────────────────────────────────────────────
 
 @app.route('/view-scan/<int:scan_id>')
 @login_required
 def view_scan(scan_id):
     scan = Dicom_image.query.get_or_404(scan_id)
-    # Patient can only view their own; medics can view any
-    if current_user.user_type == 'Patient' and scan.patient_id != current_user.id:
-        abort(403)
+    if current_user.user_type == 'Patient':
+        if scan.patient_id != current_user.id:
+            abort(403)
+    elif current_user.user_type == 'Medic':
+        medic   = Medic.query.get(current_user.id)
+        patient = Patient.query.get(scan.patient_id)
+        if patient not in medic.patients:
+            abort(403)
     return render_template('viewer.html', title=f'Viewing: {scan.name}', scan=scan)
 
-# ── DICOM API endpoints (JSON) ─────────────────────────────────────────────────
+# ── DICOM API ──────────────────────────────────────────────────────────────────
 
 @app.route('/api/dicom/load/<int:scan_id>')
 @login_required
@@ -284,6 +405,11 @@ def api_dicom_load(scan_id):
     scan = Dicom_image.query.get_or_404(scan_id)
     if current_user.user_type == 'Patient' and scan.patient_id != current_user.id:
         return jsonify({'error': 'Forbidden'}), 403
+    if current_user.user_type == 'Medic':
+        medic   = Medic.query.get(current_user.id)
+        patient = Patient.query.get(scan.patient_id)
+        if patient not in medic.patients:
+            return jsonify({'error': 'Forbidden'}), 403
 
     filepath = os.path.join(DICOM_UPLOAD_FOLDER, scan.image_file)
     if not os.path.exists(filepath):
@@ -296,7 +422,6 @@ def api_dicom_load(scan_id):
 
     num_frames = int(ds.NumberOfFrames) if hasattr(ds, 'NumberOfFrames') else 1
     metadata   = extract_metadata(ds)
-
     wc = ww = None
     if hasattr(ds, 'WindowCenter') and hasattr(ds, 'WindowWidth'):
         wc_raw = ds.WindowCenter
@@ -305,16 +430,9 @@ def api_dicom_load(scan_id):
         ww = float(ww_raw[0]) if hasattr(ww_raw, '__iter__') and not isinstance(ww_raw, str) else float(ww_raw)
 
     image_b64 = dicom_to_png_base64(ds, wc, ww, frame=0)
-
-    return jsonify({
-        'scan_id':       scan_id,
-        'filename':      scan.image_file,
-        'num_frames':    num_frames,
-        'metadata':      metadata,
-        'image':         image_b64,
-        'window_center': wc,
-        'window_width':  ww,
-    })
+    return jsonify({'scan_id': scan_id, 'filename': scan.image_file,
+                    'num_frames': num_frames, 'metadata': metadata,
+                    'image': image_b64, 'window_center': wc, 'window_width': ww})
 
 @app.route('/api/dicom/frame', methods=['POST'])
 @login_required
@@ -328,6 +446,11 @@ def api_dicom_frame():
     scan = Dicom_image.query.get_or_404(scan_id)
     if current_user.user_type == 'Patient' and scan.patient_id != current_user.id:
         return jsonify({'error': 'Forbidden'}), 403
+    if current_user.user_type == 'Medic':
+        medic   = Medic.query.get(current_user.id)
+        patient = Patient.query.get(scan.patient_id)
+        if patient not in medic.patients:
+            return jsonify({'error': 'Forbidden'}), 403
 
     filepath = os.path.join(DICOM_UPLOAD_FOLDER, scan.image_file)
     if not os.path.exists(filepath):
@@ -343,6 +466,11 @@ def api_dicom_download(scan_id):
     scan = Dicom_image.query.get_or_404(scan_id)
     if current_user.user_type == 'Patient' and scan.patient_id != current_user.id:
         abort(403)
+    if current_user.user_type == 'Medic':
+        medic   = Medic.query.get(current_user.id)
+        patient = Patient.query.get(scan.patient_id)
+        if patient not in medic.patients:
+            abort(403)
     return send_from_directory(DICOM_UPLOAD_FOLDER, scan.image_file,
                                as_attachment=True,
                                download_name=scan.name + '.dcm')

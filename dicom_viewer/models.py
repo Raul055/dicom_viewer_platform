@@ -35,19 +35,19 @@ class Patient(User):
     id = db.Column(db.Integer, db.ForeignKey('user.id'), primary_key=True)
     # Relates DICOM Image
     dicom_images = db.relationship('Dicom_image', backref='patient', lazy=True)
+    # Incoming access requests
+    access_requests = db.relationship('AccessRequest', foreign_keys='AccessRequest.patient_id', backref='patient', lazy=True)
 
-    __mapper_args__ = {
-        'polymorphic_identity': 'Patient',
-    }
+    __mapper_args__ = {'polymorphic_identity': 'Patient'}
 
 class Medic(User):
     id = db.Column(db.Integer, db.ForeignKey('user.id'), primary_key=True)
     # Relates DICOM Image
     patients = db.relationship('Patient', secondary=access_table, backref='doctors')
+    # Outgoing access requests
+    sent_requests = db.relationship('AccessRequest', foreign_keys='AccessRequest.medic_id', backref='medic', lazy=True)
 
-    __mapper_args__ = {
-        'polymorphic_identity': 'Medic',
-    }
+    __mapper_args__ = {'polymorphic_identity': 'Medic'}
 
 class Dicom_image(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -59,3 +59,13 @@ class Dicom_image(db.Model):
 
     def __repr__(self):
         return f"DICOM('{self.name}', '{self.image_file}')"
+
+class AccessRequest(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    medic_id = db.Column(db.Integer, db.ForeignKey('medic.id'), nullable=False)
+    patient_id = db.Column(db.Integer, db.ForeignKey('patient.id'), nullable=False)
+    status = db.Column(db.String(10), nullable=False, default='pending')  # pending / approved / rejected
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f"AccessRequest(medic={self.medic_id}, patient={self.patient_id}, status={self.status})"

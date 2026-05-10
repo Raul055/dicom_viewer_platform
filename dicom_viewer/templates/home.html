@@ -1,20 +1,41 @@
 {% extends "layout.html" %}
 {% block content %}
 <div class="mt-4">
-  <h1>DICOM Manager</h1>
-  <p class="lead text-muted">Remote medical imaging platform for patients and doctors.</p>
+  <div class="mt-4 d-flex align-items-center">
+  <img src="{{ url_for('static', filename='alpha.png') }}" alt="Platform Logo" style="width: 200px;" class="me-5">
+    <div>
+      <h1 class="mb-0">DICOM Manager</h1>
+      <p class="lead text-muted mb-0">Remote medical imaging platform for patients and doctors.</p>
+    </div>
+  </div>
   <hr>
   {% if current_user.is_authenticated %}
+
     {% if current_user.user_type == 'Patient' %}
-      <p>Welcome, <strong>{{ current_user.username }}</strong>! You are logged in as a <span class="badge badge-success">Patient</span>.</p>
-      <p>You can upload your DICOM scans and your doctors will be able to review them remotely.</p>
+      <p>Welcome, <strong>{{ current_user.username }}</strong>!
+        You are logged in as a <span class="badge badge-success">Patient</span>.
+      </p>
+      <p>Upload your DICOM scans and control which doctors can access them.</p>
+      {% set pending_count = current_user.access_requests | selectattr('status', 'equalto', 'pending') | list | length %}
+      {% if pending_count > 0 %}
+        <div class="alert alert-warning">
+          You have <strong>{{ pending_count }}</strong> pending access request(s) from doctors.
+          <a href="{{ url_for('my_requests') }}">Review them →</a>
+        </div>
+      {% endif %}
       <a href="{{ url_for('my_scans') }}" class="btn btn-primary mr-2">View My Scans</a>
-      <a href="{{ url_for('upload_scan') }}" class="btn btn-outline-primary">Upload New Scan</a>
+      <a href="{{ url_for('upload_scan') }}" class="btn btn-outline-primary mr-2">Upload New Scan</a>
+      <a href="{{ url_for('my_requests') }}" class="btn btn-outline-secondary">Manage Doctor Access</a>
+
     {% elif current_user.user_type == 'Medic' %}
-      <p>Welcome, <strong>{{ current_user.username }}</strong>! You are logged in as a <span class="badge badge-info">Medic</span>.</p>
-      <p>You can browse all patients and view or download their DICOM scans.</p>
-      <a href="{{ url_for('patient_list') }}" class="btn btn-primary">View Patient List</a>
+      <p>Welcome, <strong>{{ current_user.username }}</strong>!
+        You are logged in as a <span class="badge badge-info">Medic</span>.
+      </p>
+      <p>Browse patients and request access to their DICOM scans. Access is granted only after the patient approves.</p>
+      <a href="{{ url_for('patient_list') }}" class="btn btn-primary mr-2">Patient List</a>
+      <a href="{{ url_for('my_sent_requests') }}" class="btn btn-outline-secondary">My Access Requests</a>
     {% endif %}
+
   {% else %}
     <p>Please <a href="{{ url_for('login') }}">log in</a> or <a href="{{ url_for('register') }}">register</a> to get started.</p>
   {% endif %}

@@ -1,0 +1,46 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="mt-4 mb-3 d-flex justify-content-between align-items-center">
+  <h2>My Access Requests</h2>
+  <a href="{{ url_for('patient_list') }}" class="btn btn-sm btn-outline-primary">← All Patients</a>
+</div>
+
+{% if requests %}
+  <table class="table table-hover">
+    <thead class="thead-dark">
+      <tr><th>Patient</th><th>Email</th><th>Requested</th><th>Status</th><th>Action</th></tr>
+    </thead>
+    <tbody>
+      {% for req in requests %}
+      <tr>
+        <td>{{ req.patient.username }}</td>
+        <td>{{ req.patient.email }}</td>
+        <td>{{ req.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+        <td>
+          {% if req.status == 'pending' %}
+            <span class="badge badge-warning">Pending</span>
+          {% elif req.status == 'approved' %}
+            <span class="badge badge-success">Approved</span>
+          {% else %}
+            <span class="badge badge-danger">Rejected</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if req.status == 'approved' %}
+            <a href="{{ url_for('patient_scans', patient_id=req.patient_id) }}" class="btn btn-sm btn-outline-primary">View Scans</a>
+          {% elif req.status == 'rejected' %}
+            <form method="POST" action="{{ url_for('request_access', patient_id=req.patient_id) }}">
+              <button type="submit" class="btn btn-sm btn-outline-secondary">Re-request</button>
+            </form>
+          {% else %}
+            <span class="text-muted small">Awaiting response…</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% else %}
+  <div class="alert alert-info">You haven't requested access to any patients yet. Go to <a href="{{ url_for('patient_list') }}">Patient List</a> to send a request.</div>
+{% endif %}
+{% endblock %}

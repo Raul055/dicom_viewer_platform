@@ -1,29 +1,59 @@
 {% extends "layout.html" %}
 {% block content %}
-<h2 class="mt-4 mb-3">Patient List</h2>
-{% if patients %}
+<div class="mt-4 mb-3 d-flex justify-content-between align-items-center">
+  <h2>Patient List</h2>
+  <a href="{{ url_for('my_sent_requests') }}" class="btn btn-sm btn-outline-secondary">My Requests</a>
+</div>
+
+<p class="text-muted small">
+  Request access to view a patient's DICOM scans. The patient must approve before you can view anything.
+</p>
+
+{% if patients_info %}
 <table class="table table-hover">
   <thead class="thead-dark">
-    <tr>
-      <th>Username</th><th>Email</th><th>Age</th><th>Gender</th><th>Scans</th><th></th>
-    </tr>
+    <tr><th>Username</th><th>Email</th><th>Age</th><th>Gender</th><th>Status</th><th>Action</th></tr>
   </thead>
   <tbody>
-    {% for patient in patients %}
+    {% for info in patients_info %}
+    {% set p = info.patient %}
+    {% set state = info.state %}
     <tr>
-      <td>{{ patient.username }}</td>
-      <td>{{ patient.email }}</td>
-      <td>{{ patient.age }}</td>
-      <td>{{ patient.gender }}</td>
-      <td><span class="badge badge-secondary">{{ patient.dicom_images | length }}</span></td>
+      <td>{{ p.username }}</td>
+      <td>{{ p.email }}</td>
+      <td>{{ p.age }}</td>
+      <td>{{ p.gender }}</td>
       <td>
-        <a href="{{ url_for('patient_scans', patient_id=patient.id) }}" class="btn btn-sm btn-outline-primary">View Scans</a>
+        {% if state == 'approved' %}
+          <span class="badge badge-success">Approved</span>
+        {% elif state == 'pending' %}
+          <span class="badge badge-warning">Pending</span>
+        {% elif state == 'rejected' %}
+          <span class="badge badge-danger">Rejected</span>
+        {% else %}
+          <span class="badge badge-secondary">No request</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if state == 'approved' %}
+          <a href="{{ url_for('patient_scans', patient_id=p.id) }}" class="btn btn-sm btn-outline-primary">View Scans</a>
+        {% elif state == 'pending' %}
+          <button class="btn btn-sm btn-outline-secondary" disabled>Awaiting…</button>
+        {% elif state == 'rejected' %}
+          <form method="POST" action="{{ url_for('request_access', patient_id=p.id) }}">
+            <button type="submit" class="btn btn-sm btn-outline-warning">Re-request</button>
+          </form>
+        {% else %}
+          <form method="POST" action="{{ url_for('request_access', patient_id=p.id) }}">
+            <button type="submit" class="btn btn-sm btn-primary">Request Access</button>
+          </form>
+        {% endif %}
       </td>
     </tr>
     {% endfor %}
   </tbody>
 </table>
 {% else %}
-<div class="alert alert-info">No patients registered yet.</div>
+  <div class="alert alert-info">No patients registered yet.</div>
 {% endif %}
 {% endblock %}

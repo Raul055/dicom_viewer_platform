@@ -29,23 +29,36 @@
             <div class="navbar-nav mr-auto">
               <a class="nav-item nav-link" href="{{ url_for('home') }}">Home</a>
               {% if current_user.is_authenticated %}
-                <!-- Medic button -->
+
                 {% if current_user.user_type == 'Medic' %}
-                  <a class="nav-item nav-link" href="{{ url_for('patient_list') }}">Patient List</a>
+                  <a class="nav-item nav-link" href="{{ url_for('patient_list') }}">Patients</a>
+                  <a class="nav-item nav-link" href="{{ url_for('my_sent_requests') }}">
+                    My Requests
+                  </a>
                 {% endif %}
-                <!-- Patient button -->
+
                 {% if current_user.user_type == 'Patient' %}
-                  <a class="nav-item nav-link" href="{{ url_for('my_scans') }}">My DICOM Scans</a>
-                  <a class="nav-item nav-link" href="{{ url_for('upload_scan') }}">Upload Scan</a>
+                  <a class="nav-item nav-link" href="{{ url_for('my_scans') }}">My Scans</a>
+                  <a class="nav-item nav-link" href="{{ url_for('upload_scan') }}">Upload</a>
+                  <a class="nav-item nav-link" href="{{ url_for('my_requests') }}">
+                    Requests
+                    {# Show badge if there are pending requests #}
+                    {% set pending_count = current_user.access_requests | selectattr('status', 'equalto', 'pending') | list | length %}
+                    {% if pending_count > 0 %}
+                      <span class="badge badge-warning">{{ pending_count }}</span>
+                    {% endif %}
+                  </a>
                 {% endif %}
               {% endif %}
             </div>
             <!-- Navbar right side -->
             <div class="navbar-nav">
               {% if current_user.is_authenticated %}
-                <span class="nav-item nav-link text-light" style="opacity:.6">
+                <span class="nav-item nav-link text-light" style="opacity:.65">
                   {{ current_user.username }}
-                  <span class="badge badge-{% if current_user.user_type == 'Medic' %}info{% else %}success{% endif %} ml-1">{{ current_user.user_type }}</span>
+                  <span class="badge badge-{% if current_user.user_type == 'Medic' %}info{% else %}success{% endif %} ml-1">
+                    {{ current_user.user_type }}
+                  </span>
                 </span>
                 <a class="nav-item nav-link" href="{{ url_for('account') }}">Account</a>
                 <a class="nav-item nav-link" href="{{ url_for('logout') }}">Logout</a>
