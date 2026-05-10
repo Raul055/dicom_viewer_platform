@@ -91,7 +91,7 @@
 <!-- Back bar outside grid so it's full width -->
 <div id="dv-back">
   <a href="javascript:history.back()">← Back</a>
-  <span class="dv-title">🩻 {{ scan.name }}</span>
+  <span class="dv-title">{{ scan.name }}</span>
   <a class="dv-dl" href="{{ url_for('api_dicom_download', scan_id=scan.id) }}">⬇ Download .dcm</a>
 </div>
 
@@ -116,9 +116,9 @@
 
     <div id="dv-toolbar">
       <span class="dv-lbl">Zoom</span>
-      <button class="dv-btn" id="dv-zoom-out">➖</button>
-      <button class="dv-btn" id="dv-zoom-reset">🔄</button>
-      <button class="dv-btn" id="dv-zoom-in">➕</button>
+      <button class="dv-btn" id="dv-zoom-out">—</button>
+      <button class="dv-btn" id="dv-zoom-reset">Reset</button>
+      <button class="dv-btn" id="dv-zoom-in">+</button>
       <div class="dv-sep"></div>
       <span class="dv-lbl">Flip</span>
       <button class="dv-btn" id="dv-flip-h">↔</button>
@@ -128,10 +128,10 @@
       <button class="dv-btn" id="dv-rot-ccw">↺</button>
       <button class="dv-btn" id="dv-rot-cw">↻</button>
       <div class="dv-sep"></div>
-      <button class="dv-btn" id="dv-invert">⬛ Invert</button>
-      <button class="dv-btn" id="dv-pan-btn">✋ Pan</button>
+      <button class="dv-btn" id="dv-invert">Invert</button>
+      <button class="dv-btn" id="dv-pan-btn">Pan</button>
       <div class="dv-sep"></div>
-      <button class="dv-btn" id="dv-save">💾 Save PNG</button>
+      <button class="dv-btn" id="dv-save">Save PNG</button>
     </div>
 
     <div id="dv-canvas-wrap">
