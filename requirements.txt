@@ -1,0 +1,18 @@
+# Flask Web Framework
+Flask
+Flask-SQLAlchemy
+Flask-Login
+
+# Security
+Flask-Bcrypt
+bcrypt
+
+# Medical Imaging & Data Science
+pydicom
+numpy
+matplotlib
+Pillow
+
+# Database & Utilities
+SQLAlchemy
+python-dotenv
