@@ -1,1 +1,22 @@
 {% extends "layout.html" %}
+{% block content %}
+<div class="mt-4">
+  <h1>DICOM Manager</h1>
+  <p class="lead text-muted">Remote medical imaging platform for patients and doctors.</p>
+  <hr>
+  {% if current_user.is_authenticated %}
+    {% if current_user.user_type == 'Patient' %}
+      <p>Welcome, <strong>{{ current_user.username }}</strong>! You are logged in as a <span class="badge badge-success">Patient</span>.</p>
+      <p>You can upload your DICOM scans and your doctors will be able to review them remotely.</p>
+      <a href="{{ url_for('my_scans') }}" class="btn btn-primary mr-2">View My Scans</a>
+      <a href="{{ url_for('upload_scan') }}" class="btn btn-outline-primary">Upload New Scan</a>
+    {% elif current_user.user_type == 'Medic' %}
+      <p>Welcome, <strong>{{ current_user.username }}</strong>! You are logged in as a <span class="badge badge-info">Medic</span>.</p>
+      <p>You can browse all patients and view or download their DICOM scans.</p>
+      <a href="{{ url_for('patient_list') }}" class="btn btn-primary">View Patient List</a>
+    {% endif %}
+  {% else %}
+    <p>Please <a href="{{ url_for('login') }}">log in</a> or <a href="{{ url_for('register') }}">register</a> to get started.</p>
+  {% endif %}
+</div>
+{% endblock %}

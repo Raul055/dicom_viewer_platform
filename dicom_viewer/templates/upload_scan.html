@@ -1,0 +1,37 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="content-section mt-4">
+  <h2>📤 Upload DICOM Scan</h2>
+  <p class="text-muted">Upload a <code>.dcm</code> DICOM file so your doctors can review it.</p>
+  <form method="POST" enctype="multipart/form-data">
+    {{ form.hidden_tag() }}
+    <div class="form-group">
+      {{ form.name.label(class="form-control-label") }}
+      {% if form.name.errors %}
+        {{ form.name(class="form-control is-invalid") }}
+        <div class="invalid-feedback">{% for e in form.name.errors %}{{ e }}{% endfor %}</div>
+      {% else %}
+        {{ form.name(class="form-control") }}
+      {% endif %}
+    </div>
+    <div class="form-group">
+      {{ form.description.label(class="form-control-label") }}
+      {{ form.description(class="form-control", rows=3) }}
+    </div>
+    <div class="form-group">
+      {{ form.dicom_file.label(class="form-control-label") }}
+      {% if form.dicom_file.errors %}
+        {{ form.dicom_file(class="form-control-file is-invalid") }}
+        <div class="invalid-feedback">{% for e in form.dicom_file.errors %}{{ e }}{% endfor %}</div>
+      {% else %}
+        {{ form.dicom_file(class="form-control-file") }}
+      {% endif %}
+      <small class="form-text text-muted">Accepted: .dcm, .dicom</small>
+    </div>
+    <div class="form-group">
+      {{ form.submit(class="btn btn-primary") }}
+      <a href="{{ url_for('my_scans') }}" class="btn btn-secondary ml-2">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

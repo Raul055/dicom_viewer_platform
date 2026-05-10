@@ -1,5 +1,6 @@
 from dicom_viewer import db, login_manager
 from flask_login import UserMixin
+from datetime import datetime
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -17,7 +18,7 @@ class User(db.Model, UserMixin):
     email = db.Column(db.String(120), unique=True, nullable=False)
     gender = db.Column(db.String(10), nullable=False)
     age = db.Column(db.Integer, nullable=False)
-    user_type = db.Column(db.String(10), nullable=False) # 'patient' or 'medic'
+    user_type = db.Column(db.String(10), nullable=False)
     image_file = db.Column(db.String(20), nullable=False, default='default.jpg')
     password = db.Column(db.String(60), nullable=False)
 
@@ -53,7 +54,7 @@ class Dicom_image(db.Model):
     name = db.Column(db.String(100), nullable=False)
     description = db.Column(db.Text(), nullable=False)
     image_file = db.Column(db.String(255), nullable=False)
-    # Links to patient ID
+    upload_date = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     patient_id = db.Column(db.Integer, db.ForeignKey('patient.id'), nullable=False)
 
     def __repr__(self):

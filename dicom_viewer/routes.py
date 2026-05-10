@@ -1,15 +1,81 @@
 import secrets
 import os
+import io
+import base64
+import numpy as np
 from PIL import Image
-from flask import render_template, flash, redirect, url_for, request
+from flask import render_template, flash, redirect, url_for, request, jsonify, send_from_directory, abort
 from dicom_viewer import app, db, bcrypt
-from dicom_viewer.forms import login_form, registration_form, update_account_form
-from dicom_viewer.models import User, Patient, Medic
+from dicom_viewer.forms import login_form, registration_form, update_account_form, DicomUploadForm
+from dicom_viewer.models import User, Patient, Medic, Dicom_image
 from flask_login import login_user, current_user, logout_user, login_required
+import pydicom
 
-# -- Home route
-@app.route("/")
-@app.route("/home")
+DICOM_UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'static', 'dicom_uploads')
+os.makedirs(DICOM_UPLOAD_FOLDER, exist_ok=True)
+
+# ── DICOM helpers ──────────────────────────────────────────────────────────────
+
+def dicom_to_png_base64(ds, window_center=None, window_width=None, frame=0):
+    if hasattr(ds, 'NumberOfFrames') and int(ds.NumberOfFrames) > 1:
+        pixel_array = ds.pixel_array[frame]
+    else:
+        pixel_array = ds.pixel_array
+
+    if hasattr(ds, 'RescaleSlope') and hasattr(ds, 'RescaleIntercept'):
+        pixel_array = pixel_array * float(ds.RescaleSlope) + float(ds.RescaleIntercept)
+
+    if window_center is None or window_width is None:
+        if hasattr(ds, 'WindowCenter') and hasattr(ds, 'WindowWidth'):
+            wc = ds.WindowCenter
+            ww = ds.WindowWidth
+            window_center = float(wc[0]) if hasattr(wc, '__iter__') and not isinstance(wc, str) else float(wc)
+            window_width  = float(ww[0]) if hasattr(ww, '__iter__') and not isinstance(ww, str) else float(ww)
+        else:
+            window_center = float(np.median(pixel_array))
+            window_width  = float(pixel_array.max() - pixel_array.min()) or 1.0
+
+    low  = window_center - window_width / 2
+    high = window_center + window_width / 2
+    img  = np.clip(pixel_array, low, high)
+    img  = ((img - low) / (high - low) * 255).astype(np.uint8)
+
+    pil_img = Image.fromarray(img)
+    if pil_img.mode != 'RGB':
+        pil_img = pil_img.convert('RGB')
+
+    buf = io.BytesIO()
+    pil_img.save(buf, format='PNG')
+    return base64.b64encode(buf.getvalue()).decode('utf-8')
+
+
+def extract_metadata(ds):
+    tags = [
+        ('Patient Name',       str(ds.PatientName)        if hasattr(ds, 'PatientName')        else 'N/A'),
+        ('Patient ID',         str(ds.PatientID)          if hasattr(ds, 'PatientID')          else 'N/A'),
+        ('Patient Birth Date', str(ds.PatientBirthDate)   if hasattr(ds, 'PatientBirthDate')   else 'N/A'),
+        ('Patient Sex',        str(ds.PatientSex)         if hasattr(ds, 'PatientSex')         else 'N/A'),
+        ('Study Date',         str(ds.StudyDate)          if hasattr(ds, 'StudyDate')          else 'N/A'),
+        ('Study Description',  str(ds.StudyDescription)   if hasattr(ds, 'StudyDescription')   else 'N/A'),
+        ('Modality',           str(ds.Modality)           if hasattr(ds, 'Modality')           else 'N/A'),
+        ('Manufacturer',       str(ds.Manufacturer)       if hasattr(ds, 'Manufacturer')       else 'N/A'),
+        ('Institution',        str(ds.InstitutionName)    if hasattr(ds, 'InstitutionName')    else 'N/A'),
+        ('Series Description', str(ds.SeriesDescription)  if hasattr(ds, 'SeriesDescription')  else 'N/A'),
+        ('Slice Thickness',    str(ds.SliceThickness)     if hasattr(ds, 'SliceThickness')     else 'N/A'),
+        ('Pixel Spacing',      str(ds.PixelSpacing)       if hasattr(ds, 'PixelSpacing')       else 'N/A'),
+        ('Rows',               str(ds.Rows)               if hasattr(ds, 'Rows')               else 'N/A'),
+        ('Columns',            str(ds.Columns)            if hasattr(ds, 'Columns')            else 'N/A'),
+        ('Bits Allocated',     str(ds.BitsAllocated)      if hasattr(ds, 'BitsAllocated')      else 'N/A'),
+        ('Window Center',      str(ds.WindowCenter)       if hasattr(ds, 'WindowCenter')       else 'N/A'),
+        ('Window Width',       str(ds.WindowWidth)        if hasattr(ds, 'WindowWidth')        else 'N/A'),
+        ('Number of Frames',   str(ds.NumberOfFrames)     if hasattr(ds, 'NumberOfFrames')     else '1'),
+    ]
+    return tags
+
+# ── Standard routes ────────────────────────────────────────────────────────────
+
+@app.route('/')
+@app.route('/home')
 def home():
     return render_template('home.html')
 
@@ -115,5 +181,168 @@ def account():
         form.username.data = current_user.username
         form.email.data = current_user.email
     image_file = url_for('static', filename='profile_pics/' + current_user.image_file)
-    return render_template('account.html', title='account',
-                           image_file=image_file, form=form)
+    return render_template('account.html', title='account', image_file=image_file, form=form)
+
+# ── Patient: upload & manage own scans ────────────────────────────────────────
+
+@app.route('/my-scans')
+@login_required
+def my_scans():
+    if current_user.user_type != 'Patient':
+        flash('Access restricted to patients.', 'warning')
+        return redirect(url_for('home'))
+    patient = Patient.query.get(current_user.id)
+    scans = patient.dicom_images
+    return render_template('my_scans.html', title='My DICOM Scans', scans=scans)
+
+@app.route('/upload-scan', methods=['GET', 'POST'])
+@login_required
+def upload_scan():
+    if current_user.user_type != 'Patient':
+        flash('Only patients can upload DICOM scans.', 'warning')
+        return redirect(url_for('home'))
+    form = DicomUploadForm()
+    if form.validate_on_submit():
+        f = form.dicom_file.data
+        random_hex = secrets.token_hex(10)
+        _, ext = os.path.splitext(f.filename)
+        filename = random_hex + (ext if ext else '.dcm')
+        filepath = os.path.join(DICOM_UPLOAD_FOLDER, filename)
+        f.save(filepath)
+
+        # Validate it's a real DICOM
+        try:
+            pydicom.dcmread(filepath)
+        except Exception:
+            os.remove(filepath)
+            flash('Invalid DICOM file. Please upload a valid .dcm file.', 'danger')
+            return redirect(url_for('upload_scan'))
+
+        scan = Dicom_image(
+            name=form.name.data,
+            description=form.description.data,
+            image_file=filename,
+            patient_id=current_user.id
+        )
+        db.session.add(scan)
+        db.session.commit()
+        flash('DICOM scan uploaded successfully!', 'success')
+        return redirect(url_for('my_scans'))
+    return render_template('upload_scan.html', title='Upload Scan', form=form)
+
+@app.route('/delete-scan/<int:scan_id>', methods=['POST'])
+@login_required
+def delete_scan(scan_id):
+    scan = Dicom_image.query.get_or_404(scan_id)
+    if scan.patient_id != current_user.id:
+        abort(403)
+    filepath = os.path.join(DICOM_UPLOAD_FOLDER, scan.image_file)
+    if os.path.exists(filepath):
+        os.remove(filepath)
+    db.session.delete(scan)
+    db.session.commit()
+    flash('Scan deleted.', 'success')
+    return redirect(url_for('my_scans'))
+
+# ── Medic: view patient list & their scans ────────────────────────────────────
+
+@app.route('/patients')
+@login_required
+def patient_list():
+    if current_user.user_type != 'Medic':
+        flash('Access restricted to medics.', 'warning')
+        return redirect(url_for('home'))
+    all_patients = Patient.query.all()
+    return render_template('patient_list.html', title='Patient List', patients=all_patients)
+
+@app.route('/patient/<int:patient_id>/scans')
+@login_required
+def patient_scans(patient_id):
+    if current_user.user_type != 'Medic':
+        flash('Access restricted to medics.', 'warning')
+        return redirect(url_for('home'))
+    patient = Patient.query.get_or_404(patient_id)
+    return render_template('patient_scans.html', title=f"{patient.username}'s Scans",
+                           patient=patient, scans=patient.dicom_images)
+
+# ── Shared: DICOM viewer page ──────────────────────────────────────────────────
+
+@app.route('/view-scan/<int:scan_id>')
+@login_required
+def view_scan(scan_id):
+    scan = Dicom_image.query.get_or_404(scan_id)
+    # Patient can only view their own; medics can view any
+    if current_user.user_type == 'Patient' and scan.patient_id != current_user.id:
+        abort(403)
+    return render_template('viewer.html', title=f'Viewing: {scan.name}', scan=scan)
+
+# ── DICOM API endpoints (JSON) ─────────────────────────────────────────────────
+
+@app.route('/api/dicom/load/<int:scan_id>')
+@login_required
+def api_dicom_load(scan_id):
+    scan = Dicom_image.query.get_or_404(scan_id)
+    if current_user.user_type == 'Patient' and scan.patient_id != current_user.id:
+        return jsonify({'error': 'Forbidden'}), 403
+
+    filepath = os.path.join(DICOM_UPLOAD_FOLDER, scan.image_file)
+    if not os.path.exists(filepath):
+        return jsonify({'error': 'File not found on disk'}), 404
+
+    try:
+        ds = pydicom.dcmread(filepath)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+    num_frames = int(ds.NumberOfFrames) if hasattr(ds, 'NumberOfFrames') else 1
+    metadata   = extract_metadata(ds)
+
+    wc = ww = None
+    if hasattr(ds, 'WindowCenter') and hasattr(ds, 'WindowWidth'):
+        wc_raw = ds.WindowCenter
+        ww_raw = ds.WindowWidth
+        wc = float(wc_raw[0]) if hasattr(wc_raw, '__iter__') and not isinstance(wc_raw, str) else float(wc_raw)
+        ww = float(ww_raw[0]) if hasattr(ww_raw, '__iter__') and not isinstance(ww_raw, str) else float(ww_raw)
+
+    image_b64 = dicom_to_png_base64(ds, wc, ww, frame=0)
+
+    return jsonify({
+        'scan_id':       scan_id,
+        'filename':      scan.image_file,
+        'num_frames':    num_frames,
+        'metadata':      metadata,
+        'image':         image_b64,
+        'window_center': wc,
+        'window_width':  ww,
+    })
+
+@app.route('/api/dicom/frame', methods=['POST'])
+@login_required
+def api_dicom_frame():
+    data    = request.json
+    scan_id = data.get('scan_id')
+    frame   = int(data.get('frame', 0))
+    wc      = data.get('window_center')
+    ww      = data.get('window_width')
+
+    scan = Dicom_image.query.get_or_404(scan_id)
+    if current_user.user_type == 'Patient' and scan.patient_id != current_user.id:
+        return jsonify({'error': 'Forbidden'}), 403
+
+    filepath = os.path.join(DICOM_UPLOAD_FOLDER, scan.image_file)
+    if not os.path.exists(filepath):
+        return jsonify({'error': 'File not found'}), 404
+
+    ds        = pydicom.dcmread(filepath)
+    image_b64 = dicom_to_png_base64(ds, wc, ww, frame=frame)
+    return jsonify({'image': image_b64})
+
+@app.route('/api/dicom/download/<int:scan_id>')
+@login_required
+def api_dicom_download(scan_id):
+    scan = Dicom_image.query.get_or_404(scan_id)
+    if current_user.user_type == 'Patient' and scan.patient_id != current_user.id:
+        abort(403)
+    return send_from_directory(DICOM_UPLOAD_FOLDER, scan.image_file,
+                               as_attachment=True,
+                               download_name=scan.name + '.dcm')

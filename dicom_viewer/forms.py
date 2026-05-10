@@ -1,6 +1,6 @@
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileField, FileAllowed
-from wtforms import StringField, PasswordField, SubmitField, BooleanField, SelectField, IntegerField
+from wtforms import StringField, PasswordField, SubmitField, BooleanField, SelectField, IntegerField, TextAreaField
 from wtforms.validators import DataRequired, Length, Email, EqualTo, NumberRange, ValidationError
 from dicom_viewer.models import User
 from flask_login import current_user
@@ -73,3 +73,9 @@ class update_account_form(FlaskForm):
             user = User.query.filter_by(email=email.data).first()
             if user:
                 raise ValidationError('Email already taken. Please select another one.')
+
+class DicomUploadForm(FlaskForm):
+    name = StringField('Scan Name', validators=[DataRequired(), Length(min=2, max=100)])
+    description = TextAreaField('Description', validators=[DataRequired()])
+    dicom_file = FileField('DICOM File (.dcm)', validators=[DataRequired(), FileAllowed(['dcm', 'dicom'], 'DICOM files only!')])
+    submit = SubmitField('Upload Scan')

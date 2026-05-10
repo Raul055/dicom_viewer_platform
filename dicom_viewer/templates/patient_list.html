@@ -1,0 +1,29 @@
+{% extends "layout.html" %}
+{% block content %}
+<h2 class="mt-4 mb-3">👥 Patient List</h2>
+{% if patients %}
+<table class="table table-hover">
+  <thead class="thead-dark">
+    <tr>
+      <th>Username</th><th>Email</th><th>Age</th><th>Gender</th><th>Scans</th><th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for patient in patients %}
+    <tr>
+      <td>{{ patient.username }}</td>
+      <td>{{ patient.email }}</td>
+      <td>{{ patient.age }}</td>
+      <td>{{ patient.gender }}</td>
+      <td><span class="badge badge-secondary">{{ patient.dicom_images | length }}</span></td>
+      <td>
+        <a href="{{ url_for('patient_scans', patient_id=patient.id) }}" class="btn btn-sm btn-outline-primary">View Scans</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="alert alert-info">No patients registered yet.</div>
+{% endif %}
+{% endblock %}

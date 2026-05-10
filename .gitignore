@@ -1,3 +1,4 @@
 __pycache__/
 dicom_viewer/static/profile_pics/*
+dicom_viewer/static/dicom_uploads/
 !dicom_viewer/static/profile_pics/default.jpg

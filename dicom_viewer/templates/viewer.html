@@ -1,0 +1,302 @@
+{% extends "layout.html" %}
+{% block content %}
+<style>
+  /* ── Viewer overrides (Bootstrap-compatible) ── */
+  :root {
+    --dv-bg:      #09090d;
+    --dv-panel:   #151821;
+    --dv-border:  #242836;
+    --dv-accent:  #3b82f6;
+    --dv-text:    #e2e8f0;
+    --dv-muted:   #64748b;
+    --dv-radius:  10px;
+  }
+
+  #dv-root {
+    display: grid;
+    grid-template-columns: 260px 1fr 240px;
+    height: calc(100vh - 80px);
+    background: var(--dv-bg);
+    color: var(--dv-text);
+    border-radius: var(--dv-radius);
+    overflow: hidden;
+    margin-top: 12px;
+    box-shadow: 0 8px 32px rgba(0,0,0,.6);
+  }
+
+  .dv-panel { background: var(--dv-panel); border-right: 1px solid var(--dv-border); display: flex; flex-direction: column; overflow: hidden; }
+  .dv-panel:last-child { border-right: none; border-left: 1px solid var(--dv-border); }
+  .dv-panel-hdr { padding: 12px 14px; font-size: .65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: var(--dv-muted); border-bottom: 1px solid var(--dv-border); flex-shrink: 0; }
+  .dv-panel-body { flex: 1; overflow-y: auto; padding: 14px; }
+  .dv-panel-body::-webkit-scrollbar { width: 4px; }
+  .dv-panel-body::-webkit-scrollbar-thumb { background: var(--dv-border); border-radius: 4px; }
+
+  /* Info section */
+  .dv-info-row { border-bottom: 1px solid var(--dv-border); padding: 7px 0; }
+  .dv-info-row:last-child { border-bottom: none; }
+  .dv-info-key { font-size: .62rem; color: var(--dv-muted); text-transform: uppercase; letter-spacing: .8px; margin-bottom: 2px; }
+  .dv-info-val { font-size: .75rem; word-break: break-all; }
+
+  .dv-sec { font-size: .62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1.2px; color: var(--dv-muted); margin: 14px 0 8px; }
+
+  /* Window controls */
+  .dv-ww input[type=number] { width: 100%; background: var(--dv-bg); border: 1px solid var(--dv-border); color: var(--dv-text); border-radius: 6px; padding: 4px 8px; font-size: .75rem; margin-bottom: 4px; }
+  .dv-ww label { font-size: .7rem; color: var(--dv-muted); display: block; margin-bottom: 2px; }
+  #dv-apply-ww { width: 100%; padding: 7px; border-radius: 8px; border: none; cursor: pointer; background: linear-gradient(135deg, #3b82f6, #6366f1); color: #fff; font-size: .8rem; font-weight: 600; margin-top: 4px; }
+  #dv-apply-ww:hover { opacity: .85; }
+
+  /* Center viewer */
+  #dv-center { display: flex; flex-direction: column; background: #09090d; position: relative; overflow: hidden; }
+
+  /* Toolbar */
+  #dv-toolbar { display: flex; align-items: center; gap: 6px; padding: 8px 14px; background: var(--dv-panel); border-bottom: 1px solid var(--dv-border); flex-shrink: 0; flex-wrap: wrap; }
+  .dv-sep { width: 1px; height: 22px; background: var(--dv-border); margin: 0 4px; }
+  .dv-btn { background: transparent; border: 1px solid transparent; color: var(--dv-text); border-radius: 7px; padding: 4px 10px; font-size: .72rem; cursor: pointer; transition: background .15s; white-space: nowrap; }
+  .dv-btn:hover { background: rgba(255,255,255,.06); border-color: var(--dv-border); }
+  .dv-btn.active { background: rgba(59,130,246,.18); border-color: var(--dv-accent); color: var(--dv-accent); }
+  .dv-lbl { font-size: .62rem; color: var(--dv-muted); padding: 0 2px; }
+
+  /* Canvas area */
+  #dv-canvas-wrap { flex: 1; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; cursor: crosshair; }
+  #dv-canvas-wrap.pan { cursor: grab; }
+  #dv-canvas-wrap.pan:active { cursor: grabbing; }
+  #dv-img { max-width: 100%; max-height: 100%; object-fit: contain; transform-origin: center; user-select: none; display: none; }
+
+  #dv-empty { position: absolute; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--dv-muted); text-align: center; font-size: .85rem; }
+  #dv-spinner { position: absolute; display: none; inset: 0; background: rgba(9,9,13,.75); align-items: center; justify-content: center; flex-direction: column; gap: 10px; z-index: 10; }
+  #dv-spinner.show { display: flex; }
+  .spin-ring { width: 34px; height: 34px; border: 3px solid var(--dv-border); border-top-color: var(--dv-accent); border-radius: 50%; animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Overlays */
+  #dv-ov-tl { position: absolute; top: 8px; left: 8px; font-size: .67rem; color: rgba(255,255,255,.5); line-height: 1.7; pointer-events: none; }
+  #dv-ov-br { position: absolute; bottom: 8px; right: 8px; font-size: .67rem; color: rgba(255,255,255,.5); text-align: right; pointer-events: none; }
+  #dv-zoom-lbl { position: absolute; bottom: 8px; left: 8px; font-size: .67rem; color: rgba(255,255,255,.45); pointer-events: none; }
+
+  /* Frame bar */
+  #dv-frame-bar { padding: 8px 14px; background: var(--dv-panel); border-top: 1px solid var(--dv-border); flex-shrink: 0; display: none; }
+  #dv-frame-bar label { font-size: .72rem; color: var(--dv-muted); display: flex; align-items: center; gap: 8px; }
+  #dv-frame-slider { flex: 1; accent-color: var(--dv-accent); }
+  #dv-frame-info { font-size: .72rem; color: var(--dv-accent); min-width: 55px; text-align: right; }
+
+  /* Back bar */
+  #dv-back { padding: 8px 14px; background: var(--dv-panel); border-bottom: 1px solid var(--dv-border); display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  #dv-back a { color: var(--dv-accent); font-size: .78rem; text-decoration: none; }
+  #dv-back a:hover { text-decoration: underline; }
+  #dv-back .dv-title { font-size: .85rem; font-weight: 600; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #dv-back .dv-dl { color: var(--dv-text); font-size: .75rem; margin-left: auto; text-decoration: none; background: rgba(255,255,255,.07); padding: 4px 10px; border-radius: 6px; border: 1px solid var(--dv-border); }
+  #dv-back .dv-dl:hover { background: rgba(255,255,255,.12); }
+</style>
+
+<!-- Back bar outside grid so it's full width -->
+<div id="dv-back">
+  <a href="javascript:history.back()">← Back</a>
+  <span class="dv-title">🩻 {{ scan.name }}</span>
+  <a class="dv-dl" href="{{ url_for('api_dicom_download', scan_id=scan.id) }}">⬇ Download .dcm</a>
+</div>
+
+<div id="dv-root">
+
+  <!-- LEFT: scan info -->
+  <div class="dv-panel">
+    <div class="dv-panel-hdr">Scan Info</div>
+    <div class="dv-panel-body">
+      <div class="dv-info-row"><div class="dv-info-key">Name</div><div class="dv-info-val">{{ scan.name }}</div></div>
+      <div class="dv-info-row"><div class="dv-info-key">Description</div><div class="dv-info-val">{{ scan.description }}</div></div>
+      <div class="dv-info-row"><div class="dv-info-key">Patient</div><div class="dv-info-val">{{ scan.patient.username }}</div></div>
+      <div class="dv-info-row"><div class="dv-info-key">Uploaded</div><div class="dv-info-val">{{ scan.upload_date.strftime('%Y-%m-%d %H:%M') }}</div></div>
+      <div class="dv-sec">DICOM Metadata</div>
+      <div id="dv-meta"><p style="font-size:.73rem;color:var(--dv-muted)">Loading…</p></div>
+    </div>
+  </div>
+
+  <!-- CENTER: viewer -->
+  <div id="dv-center">
+    <div id="dv-spinner"><div class="spin-ring"></div><p style="font-size:.78rem;color:var(--dv-muted)">Loading…</p></div>
+
+    <div id="dv-toolbar">
+      <span class="dv-lbl">Zoom</span>
+      <button class="dv-btn" id="dv-zoom-out">➖</button>
+      <button class="dv-btn" id="dv-zoom-reset">🔄</button>
+      <button class="dv-btn" id="dv-zoom-in">➕</button>
+      <div class="dv-sep"></div>
+      <span class="dv-lbl">Flip</span>
+      <button class="dv-btn" id="dv-flip-h">↔</button>
+      <button class="dv-btn" id="dv-flip-v">↕</button>
+      <div class="dv-sep"></div>
+      <span class="dv-lbl">Rotate</span>
+      <button class="dv-btn" id="dv-rot-ccw">↺</button>
+      <button class="dv-btn" id="dv-rot-cw">↻</button>
+      <div class="dv-sep"></div>
+      <button class="dv-btn" id="dv-invert">⬛ Invert</button>
+      <button class="dv-btn" id="dv-pan-btn">✋ Pan</button>
+      <div class="dv-sep"></div>
+      <button class="dv-btn" id="dv-save">💾 Save PNG</button>
+    </div>
+
+    <div id="dv-canvas-wrap">
+      <div id="dv-empty"><div style="font-size:3.5rem;opacity:.25">🩻</div><p>Loading scan…</p></div>
+      <img id="dv-img" alt="DICOM" draggable="false"/>
+      <div id="dv-ov-tl"></div>
+      <div id="dv-ov-br"></div>
+      <div id="dv-zoom-lbl"></div>
+    </div>
+
+    <div id="dv-frame-bar">
+      <label>Frame: <input type="range" id="dv-frame-slider" min="0" value="0" step="1"/> <span id="dv-frame-info">1/1</span></label>
+    </div>
+  </div>
+
+  <!-- RIGHT: windowing -->
+  <div class="dv-panel">
+    <div class="dv-panel-hdr">Window / Level</div>
+    <div class="dv-panel-body">
+      <div class="dv-ww">
+        <label>Center <span id="dv-wc-disp">—</span></label>
+        <input type="number" id="dv-wc-input" placeholder="Window Center"/>
+        <label>Width <span id="dv-ww-disp">—</span></label>
+        <input type="number" id="dv-ww-input" placeholder="Window Width"/>
+        <button id="dv-apply-ww">Apply</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const SCAN_ID = {{ scan.id }};
+
+const state = {
+  numFrames: 1, frame: 0,
+  wc: null, ww: null,
+  zoom: 1, rotate: 0, flipH: false, flipV: false, invert: false,
+  panMode: false, panX: 0, panY: 0,
+  dragging: false, dsx: 0, dsy: 0, psx: 0, psy: 0,
+};
+
+const img      = document.getElementById('dv-img');
+const spinner  = document.getElementById('dv-spinner');
+const empty    = document.getElementById('dv-empty');
+const metaDiv  = document.getElementById('dv-meta');
+const frameBar = document.getElementById('dv-frame-bar');
+const frameSlider = document.getElementById('dv-frame-slider');
+const frameInfo   = document.getElementById('dv-frame-info');
+const wcInput  = document.getElementById('dv-wc-input');
+const wwInput  = document.getElementById('dv-ww-input');
+const wcDisp   = document.getElementById('dv-wc-disp');
+const wwDisp   = document.getElementById('dv-ww-disp');
+const wrap     = document.getElementById('dv-canvas-wrap');
+const panBtn   = document.getElementById('dv-pan-btn');
+
+function applyTransform() {
+  const sx = (state.flipH ? -1 : 1) * state.zoom;
+  const sy = (state.flipV ? -1 : 1) * state.zoom;
+  img.style.transform = `translate(${state.panX}px,${state.panY}px) rotate(${state.rotate}deg) scale(${sx},${sy})`;
+  img.style.filter = state.invert ? 'invert(1)' : 'none';
+  document.getElementById('dv-zoom-lbl').textContent = `Zoom: ${Math.round(state.zoom*100)}%`;
+}
+
+function showImage(b64) {
+  img.src = 'data:image/png;base64,' + b64;
+  img.style.display = 'block';
+  empty.style.display = 'none';
+  applyTransform();
+}
+
+// Initial load
+async function init() {
+  spinner.classList.add('show');
+  const res  = await fetch(`/api/dicom/load/${SCAN_ID}`);
+  const data = await res.json();
+  if (data.error) { alert(data.error); return; }
+  spinner.classList.remove('show');
+
+  state.numFrames = data.num_frames;
+  state.wc = data.window_center;
+  state.ww = data.window_width;
+
+  wcInput.value = state.wc !== null ? Math.round(state.wc) : '';
+  wwInput.value = state.ww !== null ? Math.round(state.ww) : '';
+  wcDisp.textContent = state.wc !== null ? Math.round(state.wc) : '—';
+  wwDisp.textContent = state.ww !== null ? Math.round(state.ww) : '—';
+
+  if (state.numFrames > 1) {
+    frameBar.style.display = 'block';
+    frameSlider.max = state.numFrames - 1;
+    frameInfo.textContent = `1/${state.numFrames}`;
+  }
+
+  // Metadata
+  if (data.metadata && data.metadata.length) {
+    metaDiv.innerHTML = data.metadata.map(([k,v]) => `
+      <div class="dv-info-row">
+        <div class="dv-info-key">${k}</div>
+        <div class="dv-info-val">${v}</div>
+      </div>`).join('');
+  }
+
+  // Overlay
+  const modality  = (data.metadata.find(r=>r[0]==='Modality') || ['','N/A'])[1];
+  const studyDate = (data.metadata.find(r=>r[0]==='Study Date') || ['','N/A'])[1];
+  document.getElementById('dv-ov-tl').innerHTML = `<div>${modality}</div><div>${studyDate}</div>`;
+  document.getElementById('dv-ov-br').innerHTML = `<div>Scan #${SCAN_ID}</div>`;
+
+  showImage(data.image);
+}
+init();
+
+// Frame slider
+frameSlider.addEventListener('input', async () => {
+  state.frame = parseInt(frameSlider.value);
+  frameInfo.textContent = `${state.frame+1}/${state.numFrames}`;
+  spinner.classList.add('show');
+  const res  = await fetch('/api/dicom/frame', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({scan_id: SCAN_ID, frame: state.frame, window_center: state.wc, window_width: state.ww}) });
+  const data = await res.json();
+  spinner.classList.remove('show');
+  img.src = 'data:image/png;base64,' + data.image;
+});
+
+// Apply windowing
+document.getElementById('dv-apply-ww').addEventListener('click', async () => {
+  state.wc = parseFloat(wcInput.value) || null;
+  state.ww = parseFloat(wwInput.value) || null;
+  wcDisp.textContent = state.wc !== null ? Math.round(state.wc) : '—';
+  wwDisp.textContent = state.ww !== null ? Math.round(state.ww) : '—';
+  spinner.classList.add('show');
+  const res  = await fetch('/api/dicom/frame', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({scan_id: SCAN_ID, frame: state.frame, window_center: state.wc, window_width: state.ww}) });
+  const data = await res.json();
+  spinner.classList.remove('show');
+  img.src = 'data:image/png;base64,' + data.image;
+});
+
+// Toolbar buttons
+document.getElementById('dv-zoom-in').addEventListener('click',    () => { state.zoom = Math.min(state.zoom*1.25, 10); applyTransform(); });
+document.getElementById('dv-zoom-out').addEventListener('click',   () => { state.zoom = Math.max(state.zoom/1.25, .1); applyTransform(); });
+document.getElementById('dv-zoom-reset').addEventListener('click', () => { state.zoom=1; state.panX=0; state.panY=0; applyTransform(); });
+document.getElementById('dv-flip-h').addEventListener('click',     () => { state.flipH=!state.flipH; applyTransform(); });
+document.getElementById('dv-flip-v').addEventListener('click',     () => { state.flipV=!state.flipV; applyTransform(); });
+document.getElementById('dv-rot-cw').addEventListener('click',     () => { state.rotate=(state.rotate+90)%360; applyTransform(); });
+document.getElementById('dv-rot-ccw').addEventListener('click',    () => { state.rotate=(state.rotate-90+360)%360; applyTransform(); });
+document.getElementById('dv-invert').addEventListener('click',     () => { state.invert=!state.invert; applyTransform(); });
+panBtn.addEventListener('click', () => {
+  state.panMode=!state.panMode;
+  panBtn.classList.toggle('active', state.panMode);
+  wrap.classList.toggle('pan', state.panMode);
+});
+document.getElementById('dv-save').addEventListener('click', () => {
+  if (!img.src) return;
+  const a = document.createElement('a');
+  a.href = img.src;
+  a.download = 'dicom_scan_' + SCAN_ID + '.png';
+  a.click();
+});
+
+// Pan
+wrap.addEventListener('mousedown', e => { if (!state.panMode) return; state.dragging=true; state.dsx=e.clientX; state.dsy=e.clientY; state.psx=state.panX; state.psy=state.panY; });
+window.addEventListener('mousemove', e => { if (!state.dragging) return; state.panX=state.psx+(e.clientX-state.dsx); state.panY=state.psy+(e.clientY-state.dsy); applyTransform(); });
+window.addEventListener('mouseup', () => { state.dragging=false; });
+
+// Scroll zoom
+wrap.addEventListener('wheel', e => { e.preventDefault(); state.zoom=Math.min(Math.max(state.zoom*(e.deltaY<0?1.1:.9),.1),10); applyTransform(); }, {passive:false});
+</script>
+{% endblock %}
